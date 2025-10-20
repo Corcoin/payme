@@ -1,3 +1,7 @@
 Flask
 flask-cors
+requests
 gunicorn
+logging
+datetime
+jsonify
