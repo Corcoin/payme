@@ -1,0 +1,26 @@
+{
+    "bob@example.com": {
+        "stripe_account": "acct_1SJqvVI4g3HvRuos"
+    },
+    "alice@example.com": {
+        "stripe_account": "acct_1SJqvXEYB0o3nYo3"
+    },
+    "al@example.com": {
+        "paypal_email": "al@example.com"
+    },
+    "bo@example.com": {
+        "paypal_email": "bo@example.com"
+    },
+    "a@example.com": {
+        "paypal_email": "a@example.com"
+    },
+    "b@example.com": {
+        "paypal_email": "b@example.com"
+    },
+    "a5@example.com": {
+        "paypal_email": "a5@example.com"
+    },
+    "b1@example.com": {
+        "paypal_email": "b1@example.com"
+    }
+}
