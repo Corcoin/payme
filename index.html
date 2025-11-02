@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Eater&display=swap" rel="stylesheet">
+<title>💰 GG PayMe — Pay with Card</title>
+<style>
+body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0244fa; color: #fff; }
+.container { text-align: center; background: rgba(0,0,0,0.5); padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px; }
+h1 { color: #006eff; margin-bottom: 1rem;font-size: 80px;}
+input { padding: 10px; margin: 8px 0; width: 95%; border-radius: 8px; border: none; font-size: 16px; }
+#paypal-button-container { margin-top: 20px; }
+#payment-log { margin-top: 20px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>GG PayMe</h1>
+  <h2 style="color: #006eff; font-weight: normal; font-size: 1rem; margin-bottom: 1rem;">
+    Recipient must have a PayPal account. Sender doesn’t need one. <br> Hosted and Secure By Cloudflare
+  </h2>
+  <input type="number" id="amount" placeholder="Amount (USD)" min="1" step="0.01" required>
+  <input type="email" id="receiver" placeholder="Recipient PayPal Email" required>
+  <div id="paypal-button-container"></div>
+
+  <div id="payment-log"></div>
+
+  <footer style="margin-top: 2rem; font-size: 1rem; color: #006eff; text-align: center;">
+    Brian Wesson | &copy; 2025
+  </footer>
+</div>
+
+<!-- PayPal SDK -->
+<script src="https://www.paypal.com/sdk/js?client-id=AX9E5Vt7wXq7dvD-40MMIJkDy4NPNQ_R0nHclnYbJseg9rm_T71_kyDR0vZJcYOSTAY6CFUDqciocQ92&currency=USD&enable-funding=card"></script>
+
+<script>
+// Update log display
+function updateLog() {
+    const logEl = document.getElementById('payment-log');
+    const payments = JSON.parse(localStorage.getItem('payments') || '[]');
+    if(payments.length === 0) { logEl.innerHTML = '<em>No payments yet.</em>'; return; }
+    logEl.innerHTML = payments.map(p => 
+        `Date: ${new Date(p.date).toLocaleString()}<br>
+         TxID: ${p.transaction_id}<br>
+         Amount: $${p.amount.toFixed(2)} | Payout: $${p.payout} | Recipient: ${p.recipient}<hr>`
+    ).join('');
+}
+updateLog();
+
+paypal.Buttons({
+    style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' },
+
+    createOrder: (data, actions) => {
+        const amount = document.getElementById('amount').value || "1.00";
+        return actions.order.create({ purchase_units: [{ amount: { value: amount } }] });
+    },
+
+    onApprove: (data, actions) => actions.order.capture().then(async details => {
+        alert("✅ Payment received! Transaction ID: " + details.id);
+
+        const recipient = document.getElementById('receiver').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const payout = (amount * 0.9).toFixed(2);
+
+        // Save locally
+        let payments = JSON.parse(localStorage.getItem('payments') || '[]');
+        payments.push({ recipient, amount, payout, transaction_id: details.id, date: new Date().toISOString() });
+        localStorage.setItem('payments', JSON.stringify(payments));
+        updateLog();
+
+        // Call serverless function to send 90% payout
+        try {
+            const res = await fetch('https://your-worker-url.workers.dev', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient, amount, transaction_id: details.id })
+            });
+            const json = await res.json();
+            if(json.success) alert(`💸 90% ($${payout}) sent to recipient automatically!`);
+            else alert("❌ Payout failed: " + (json.error || "Unknown error"));
+        } catch(e) {
+            console.error(e);
+            alert("❌ Payout request failed.");
+        }
+    }),
+
+    onError: err => { console.error(err); alert("❌ Payment failed. Try again."); }
+}).render('#paypal-button-container');
+</script>
+
+</body>
+</html>
