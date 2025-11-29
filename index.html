@@ -3,94 +3,179 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=Eater&display=swap" rel="stylesheet">
-<title>💰 Precious K — Pay with Card</title>
+<title>JDA Marketplace</title>
+<script src="https://cdn.jsdelivr.net/npm/qrious/dist/qrious.min.js"></script>
 <style>
-body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #0244fa; color: #fff; }
-.container { text-align: center; background: rgba(0,0,0,0.5); padding: 2rem; border-radius: 16px; width: 100%; max-width: 400px; }
-h1 { color: #006eff; margin-bottom: 1rem;font-size: 80px;}
-input { padding: 10px; margin: 8px 0; width: 95%; border-radius: 8px; border: none; font-size: 16px; }
-#paypal-button-container { margin-top: 20px; }
-#payment-log { margin-top: 20px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 14px; }
+body, html { margin:0; padding:0; font-family:'Segoe UI',sans-serif; background:#0f0f0f; color:#fff; min-height:100vh; display:flex; justify-content:center; align-items:flex-start; }
+.container { width:100%; max-width:1400px; padding:20px; display:grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap:20px; }
+.card { background:#1a1a1a; border-radius:12px; padding:20px; box-shadow:0 6px 15px rgba(0,0,0,0.6); transition:0.2s; }
+.card:hover { transform:translateY(-4px); box-shadow:0 12px 25px rgba(0,0,0,0.7); }
+input, button { width:100%; padding:12px; margin:5px 0; border-radius:8px; border:none; font-size:1em; }
+input { background:#222; color:#fff; }
+input:focus { outline:2px solid #0af; background:#1e1e1e; }
+button { background:linear-gradient(90deg,#0af,#08f); color:#fff; font-weight:600; cursor:pointer; transition:0.2s; }
+button:hover { background:linear-gradient(90deg,#08f,#0af); transform:translateY(-2px); }
+h2 { color:#0af; text-align:center; margin-bottom:10px; }
+pre { background:#111; padding:10px; border-radius:8px; overflow-x:auto; }
+canvas { display:block; margin:10px auto; border-radius:12px; background:#fff; }
+@media(max-width:768px){ .container{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <h1>Precious K</h1>
-  <h2 style="color: #006eff; font-weight: normal; font-size: 1rem; margin-bottom: 1rem;">
-    Recipient must have a PayPal account. Sender doesn’t need one. <br> Hosted and Secure By Cloudflare
-  </h2>
-  <input type="number" id="amount" placeholder="Amount (USD)" min="1" step="0.01" required>
-  <input type="email" id="receiver" placeholder="Recipient PayPal Email" required>
-  <div id="paypal-button-container"></div>
-
-  <div id="payment-log"></div>
-
-  <footer style="margin-top: 2rem; font-size: 1rem; color: #006eff; text-align: center;">
-    Brian Wesson |CEO Precious K &copy; 2025 <br>
-    
-    
-  </footer>
+<!-- AUTH -->
+<div class="container" id="auth">
+    <div class="card">
+        <h2>Signup</h2>
+        <input id="su_email" placeholder="Email">
+        <input id="su_paypal" placeholder="PayPal Email">
+        <input id="su_pass" type="password" placeholder="Password">
+        <button onclick="signup()">Signup</button>
+    </div>
+    <div class="card">
+        <h2>Login</h2>
+        <input id="li_email" placeholder="Email">
+        <input id="li_pass" type="password" placeholder="Password">
+        <button onclick="login()">Login</button>
+    </div>
 </div>
 
-<!-- PayPal SDK -->
-<script src="https://www.paypal.com/sdk/js?client-id=AX9E5Vt7wXq7dvD-40MMIJkDy4NPNQ_R0nHclnYbJseg9rm_T71_kyDR0vZJcYOSTAY6CFUDqciocQ92&currency=USD&enable-funding=card"></script>
+<!-- DASHBOARD -->
+<div class="container" id="dashboard" style="display:none;">
+    <div class="card">
+        <h2>Wallet</h2>
+        <pre id="me"></pre>
+    </div>
+    <div class="card">
+        <h2>Live Price</h2>
+        <div id="price">$0.01</div>
+    </div>
+    <div class="card">
+        <h2>Deposit USD</h2>
+        <input id="deposit_amount" placeholder="USD Amount">
+        <button onclick="createPaypalOrder()">Pay with PayPal</button>
+        <canvas id="qr" width="150" height="150"></canvas>
+    </div>
+    <div class="card">
+        <h2>Buy Coins</h2>
+        <input id="buy_usd" placeholder="USD Amount">
+        <button onclick="buy()">Buy</button>
+    </div>
+    <div class="card">
+        <h2>P2P Trade</h2>
+        <input id="tr_buyer" placeholder="Buyer ID">
+        <input id="tr_amt" placeholder="Amount">
+        <button onclick="trade()">Sell</button>
+    </div>
+    <div class="card">
+        <h2>Buyers Pool</h2>
+        <pre id="pool"></pre>
+    </div>
+</div>
 
 <script>
-// Update log display
-function updateLog() {
-    const logEl = document.getElementById('payment-log');
-    const payments = JSON.parse(localStorage.getItem('payments') || '[]');
-    if(payments.length === 0) { logEl.innerHTML = '<em>No payments yet.</em>'; return; }
-    logEl.innerHTML = payments.map(p => 
-        `Date: ${new Date(p.date).toLocaleString()}<br>
-         TxID: ${p.transaction_id}<br>
-         Amount: $${p.amount.toFixed(2)} | Payout: $${p.payout} | Recipient: ${p.recipient}<hr>`
-    ).join('');
+let currentUser = null;
+
+/* ---- AUTH ---- */
+function signup(){
+    const data = new URLSearchParams({
+        email: su_email.value,
+        paypal: su_paypal.value,
+        password: su_pass.value
+    });
+    fetch('api.php?api=signup',{method:'POST',body:data,credentials:'same-origin'})
+    .then(r=>r.json()).then(alert);
 }
-updateLog();
 
-paypal.Buttons({
-    style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' },
+function login(){
+    const data = new URLSearchParams({
+        email: li_email.value,
+        password: li_pass.value
+    });
+    fetch('api.php?api=login',{method:'POST',body:data,credentials:'same-origin'})
+    .then(r=>r.json()).then(t=>{
+        if(t.ok){
+            auth.style.display='none';
+            dashboard.style.display='grid';
+            loadMe();
+            loadPool();
+            generateQR();
+            startPriceStream();
+        } else alert("Login failed");
+    });
+}
 
-    createOrder: (data, actions) => {
-        const amount = document.getElementById('amount').value || "1.00";
-        return actions.order.create({ purchase_units: [{ amount: { value: amount } }] });
-    },
+/* ---- USER INFO ---- */
+function loadMe(){
+    fetch('api.php?api=me',{credentials:'same-origin'})
+    .then(r=>r.json())
+    .then(u=>{
+        currentUser = u;
+        me.innerText = `USD: $${u.balance_usd.toFixed(2)}\nJDA: ${u.balance_jda.toFixed(2)}`;
+    });
+}
 
-    onApprove: (data, actions) => actions.order.capture().then(async details => {
-        alert("✅ Payment received! Transaction ID: " + details.id);
+/* ---- LIVE PRICE ---- */
+function startPriceStream(){
+    setInterval(()=>{
+        fetch('api.php?api=me',{credentials:'same-origin'})
+        .then(r=>r.json())
+        .then(u=>{ price.innerText = `$${u.balance_jda.toFixed(5)}`; });
+    },1000);
+}
 
-        const recipient = document.getElementById('receiver').value;
-        const amount = parseFloat(document.getElementById('amount').value);
-        const payout = (amount * 0.9).toFixed(2);
+/* ---- BUY COINS ---- */
+function buy(){
+    const data = new URLSearchParams({usd: buy_usd.value});
+    fetch('api.php?api=buy',{method:'POST',body:data,credentials:'same-origin'})
+    .then(r=>r.json()).then(loadMe);
+}
 
-        // Save locally
-        let payments = JSON.parse(localStorage.getItem('payments') || '[]');
-        payments.push({ recipient, amount, payout, transaction_id: details.id, date: new Date().toISOString() });
-        localStorage.setItem('payments', JSON.stringify(payments));
-        updateLog();
+/* ---- TRADE ---- */
+function trade(){
+    const data = new URLSearchParams({buyer:tr_buyer.value, amt:tr_amt.value});
+    fetch('api.php?api=trade',{method:'POST',body:data,credentials:'same-origin'})
+    .then(r=>r.json()).then(d=>alert("TX: "+d.tx));
+}
 
-        // Call serverless function to send 90% payout
-        try {
-            const res = await fetch('https://your-worker-url.workers.dev', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipient, amount, transaction_id: details.id })
-            });
-            const json = await res.json();
-            if(json.success) alert(`💸 90% ($${payout}) sent to recipient automatically!`);
-            else alert("❌ Payout failed: " + (json.error || "Unknown error"));
-        } catch(e) {
-            console.error(e);
-            alert("❌ Payout request failed.");
-        }
-    }),
+/* ---- BUYERS POOL ---- */
+function loadPool(){
+    fetch('api.php?api=buyers',{credentials:'same-origin'})
+    .then(r=>r.json())
+    .then(d=>{
+        pool.innerText = d.map(u=>`ID:${u.id} | ${u.email} | JDA:${u.balance_jda.toFixed(2)}`).join("\n");
+    });
+}
 
-    onError: err => { console.error(err); alert("❌ Payment failed. Try again."); }
-}).render('#paypal-button-container');
+/* ---- QR CODE ---- */
+function generateQR(){
+    if(!currentUser) return;
+    new QRious({element:document.getElementById('qr'),value:"paypal:"+currentUser.paypal,width:150,height:150});
+}
+
+/* ---- SERVER-SIDE PAYPAL ---- */
+async function createPaypalOrder(){
+    const amt = parseFloat(deposit_amount.value);
+    if(!amt || !currentUser) return alert("Enter USD amount");
+
+    const res = await fetch('api.php?api=paypal_order',{
+        method:'POST',
+        body: JSON.stringify({amount: amt}),
+        credentials:'same-origin'
+    });
+    const order = await res.json();
+    const orderID = order.id;
+
+    const cap = await fetch('api.php?api=paypal_capture',{
+        method:'POST',
+        body: JSON.stringify({orderID}),
+        credentials:'same-origin'
+    });
+    const captured = await cap.json();
+    alert("Deposit successful: $"+amt);
+    loadMe();
+}
+
 </script>
-
 </body>
 </html>
