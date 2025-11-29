@@ -74,6 +74,7 @@ canvas { display:block; margin:10px auto; border-radius:12px; background:#fff; }
 </div>
 
 <script>
+const BASE_URL = "http://localhost:8000";
 let currentUser = null;
 
 /* ---- AUTH ---- */
@@ -83,7 +84,7 @@ function signup(){
         paypal: su_paypal.value,
         password: su_pass.value
     });
-    fetch('api.php?api=signup',{method:'POST',body:data,credentials:'same-origin'})
+    fetch(`${BASE_URL}/api.php?api=signup`,{method:'POST',body:data,credentials:'include'})
     .then(r=>r.json()).then(alert);
 }
 
@@ -92,7 +93,7 @@ function login(){
         email: li_email.value,
         password: li_pass.value
     });
-    fetch('api.php?api=login',{method:'POST',body:data,credentials:'same-origin'})
+    fetch(`${BASE_URL}/api.php?api=login`,{method:'POST',body:data,credentials:'include'})
     .then(r=>r.json()).then(t=>{
         if(t.ok){
             auth.style.display='none';
@@ -107,7 +108,7 @@ function login(){
 
 /* ---- USER INFO ---- */
 function loadMe(){
-    fetch('api.php?api=me',{credentials:'same-origin'})
+    fetch(`${BASE_URL}/api.php?api=me`,{credentials:'include'})
     .then(r=>r.json())
     .then(u=>{
         currentUser = u;
@@ -115,32 +116,33 @@ function loadMe(){
     });
 }
 
-/* ---- LIVE PRICE ---- */
+/* ---- LIVE PRICE (SSE) ---- */
 function startPriceStream(){
-    setInterval(()=>{
-        fetch('api.php?api=me',{credentials:'same-origin'})
-        .then(r=>r.json())
-        .then(u=>{ price.innerText = `$${u.balance_jda.toFixed(5)}`; });
-    },1000);
+    const sse = new EventSource(`${BASE_URL}/api.php?stream=1`);
+    sse.onmessage = e=>{
+        const p = JSON.parse(e.data).price;
+        price.innerText = `$${parseFloat(p).toFixed(5)}`;
+    };
 }
 
 /* ---- BUY COINS ---- */
 function buy(){
     const data = new URLSearchParams({usd: buy_usd.value});
-    fetch('api.php?api=buy',{method:'POST',body:data,credentials:'same-origin'})
-    .then(r=>r.json()).then(loadMe);
+    fetch(`${BASE_URL}/api.php?api=buy`,{method:'POST',body:data,credentials:'include'})
+    .then(r=>r.json())
+    .then(loadMe);
 }
 
 /* ---- TRADE ---- */
 function trade(){
     const data = new URLSearchParams({buyer:tr_buyer.value, amt:tr_amt.value});
-    fetch('api.php?api=trade',{method:'POST',body:data,credentials:'same-origin'})
+    fetch(`${BASE_URL}/api.php?api=trade`,{method:'POST',body:data,credentials:'include'})
     .then(r=>r.json()).then(d=>alert("TX: "+d.tx));
 }
 
 /* ---- BUYERS POOL ---- */
 function loadPool(){
-    fetch('api.php?api=buyers',{credentials:'same-origin'})
+    fetch(`${BASE_URL}/api.php?api=buyers`,{credentials:'include'})
     .then(r=>r.json())
     .then(d=>{
         pool.innerText = d.map(u=>`ID:${u.id} | ${u.email} | JDA:${u.balance_jda.toFixed(2)}`).join("\n");
@@ -158,24 +160,25 @@ async function createPaypalOrder(){
     const amt = parseFloat(deposit_amount.value);
     if(!amt || !currentUser) return alert("Enter USD amount");
 
-    const res = await fetch('api.php?api=paypal_order',{
+    // create order on server
+    const res = await fetch(`${BASE_URL}/api.php?api=paypal_order`,{
         method:'POST',
         body: JSON.stringify({amount: amt}),
-        credentials:'same-origin'
+        credentials:'include'
     });
     const order = await res.json();
     const orderID = order.id;
 
-    const cap = await fetch('api.php?api=paypal_capture',{
+    // capture order
+    const cap = await fetch(`${BASE_URL}/api.php?api=paypal_capture`,{
         method:'POST',
         body: JSON.stringify({orderID}),
-        credentials:'same-origin'
+        credentials:'include'
     });
     const captured = await cap.json();
     alert("Deposit successful: $"+amt);
     loadMe();
 }
-
 </script>
 </body>
 </html>
