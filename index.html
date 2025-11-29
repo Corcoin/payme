@@ -74,110 +74,135 @@ canvas { display:block; margin:10px auto; border-radius:12px; background:#fff; }
 </div>
 
 <script>
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = "http://localhost:8000"; // Node.js server URL
 let currentUser = null;
 
-/* ---- AUTH ---- */
-function signup(){
-    const data = new URLSearchParams({
-        email: su_email.value,
-        paypal: su_paypal.value,
-        password: su_pass.value
-    });
-    fetch(`${BASE_URL}/api.php?api=signup`,{method:'POST',body:data,credentials:'include'})
-    .then(r=>r.json()).then(alert);
+// ---- AUTH ----
+async function signup(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=signup`, {
+            method:'POST',
+            body: new URLSearchParams({
+                email: su_email.value,
+                paypal: su_paypal.value,
+                password: su_pass.value
+            }),
+            credentials:'include'
+        });
+        alert(JSON.stringify(await res.json()));
+    } catch(e){ console.error(e); }
 }
 
-function login(){
-    const data = new URLSearchParams({
-        email: li_email.value,
-        password: li_pass.value
-    });
-    fetch(`${BASE_URL}/api.php?api=login`,{method:'POST',body:data,credentials:'include'})
-    .then(r=>r.json()).then(t=>{
-        if(t.ok){
+async function login(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=login`, {
+            method:'POST',
+            body: new URLSearchParams({
+                email: li_email.value,
+                password: li_pass.value
+            }),
+            credentials:'include'
+        });
+        const data = await res.json();
+        if(data.ok){
             auth.style.display='none';
             dashboard.style.display='grid';
-            loadMe();
-            loadPool();
+            await loadMe();
+            await loadPool();
             generateQR();
             startPriceStream();
         } else alert("Login failed");
-    });
+    } catch(e){ console.error(e); }
 }
 
-/* ---- USER INFO ---- */
-function loadMe(){
-    fetch(`${BASE_URL}/api.php?api=me`,{credentials:'include'})
-    .then(r=>r.json())
-    .then(u=>{
+// ---- USER INFO ----
+async function loadMe(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=me`, { credentials:'include' });
+        const u = await res.json();
         currentUser = u;
         me.innerText = `USD: $${u.balance_usd.toFixed(2)}\nJDA: ${u.balance_jda.toFixed(2)}`;
-    });
+    } catch(e){ console.error(e); }
 }
 
-/* ---- LIVE PRICE (SSE) ---- */
+// ---- LIVE PRICE (SSE) ----
 function startPriceStream(){
-    const sse = new EventSource(`${BASE_URL}/api.php?stream=1`);
+    const sse = new EventSource(`${BASE_URL}/api?stream=1`);
     sse.onmessage = e=>{
         const p = JSON.parse(e.data).price;
         price.innerText = `$${parseFloat(p).toFixed(5)}`;
     };
 }
 
-/* ---- BUY COINS ---- */
-function buy(){
-    const data = new URLSearchParams({usd: buy_usd.value});
-    fetch(`${BASE_URL}/api.php?api=buy`,{method:'POST',body:data,credentials:'include'})
-    .then(r=>r.json())
-    .then(loadMe);
+// ---- BUY COINS ----
+async function buy(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=buy`, {
+            method:'POST',
+            body: new URLSearchParams({usd: buy_usd.value}),
+            credentials:'include'
+        });
+        await res.json();
+        await loadMe();
+    } catch(e){ console.error(e); }
 }
 
-/* ---- TRADE ---- */
-function trade(){
-    const data = new URLSearchParams({buyer:tr_buyer.value, amt:tr_amt.value});
-    fetch(`${BASE_URL}/api.php?api=trade`,{method:'POST',body:data,credentials:'include'})
-    .then(r=>r.json()).then(d=>alert("TX: "+d.tx));
+// ---- TRADE ----
+async function trade(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=trade`, {
+            method:'POST',
+            body: new URLSearchParams({buyer: tr_buyer.value, amt: tr_amt.value}),
+            credentials:'include'
+        });
+        const d = await res.json();
+        alert("TX: "+d.tx);
+    } catch(e){ console.error(e); }
 }
 
-/* ---- BUYERS POOL ---- */
-function loadPool(){
-    fetch(`${BASE_URL}/api.php?api=buyers`,{credentials:'include'})
-    .then(r=>r.json())
-    .then(d=>{
+// ---- BUYERS POOL ----
+async function loadPool(){
+    try {
+        const res = await fetch(`${BASE_URL}/api?api=buyers`, { credentials:'include' });
+        const d = await res.json();
         pool.innerText = d.map(u=>`ID:${u.id} | ${u.email} | JDA:${u.balance_jda.toFixed(2)}`).join("\n");
-    });
+    } catch(e){ console.error(e); }
 }
 
-/* ---- QR CODE ---- */
+// ---- QR CODE ----
 function generateQR(){
     if(!currentUser) return;
-    new QRious({element:document.getElementById('qr'),value:"paypal:"+currentUser.paypal,width:150,height:150});
+    new QRious({ element: document.getElementById('qr'), value: "paypal:"+currentUser.paypal, width:150, height:150 });
 }
 
-/* ---- SERVER-SIDE PAYPAL ---- */
+// ---- SERVER-SIDE PAYPAL ----
 async function createPaypalOrder(){
+    if(!currentUser) return alert("Login first");
     const amt = parseFloat(deposit_amount.value);
-    if(!amt || !currentUser) return alert("Enter USD amount");
+    if(!amt) return alert("Enter USD amount");
 
-    // create order on server
-    const res = await fetch(`${BASE_URL}/api.php?api=paypal_order`,{
-        method:'POST',
-        body: JSON.stringify({amount: amt}),
-        credentials:'include'
-    });
-    const order = await res.json();
-    const orderID = order.id;
+    try {
+        // create order
+        const res = await fetch(`${BASE_URL}/api?api=paypal_order`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({amount: amt}),
+            credentials:'include'
+        });
+        const order = await res.json();
+        const orderID = order.id;
 
-    // capture order
-    const cap = await fetch(`${BASE_URL}/api.php?api=paypal_capture`,{
-        method:'POST',
-        body: JSON.stringify({orderID}),
-        credentials:'include'
-    });
-    const captured = await cap.json();
-    alert("Deposit successful: $"+amt);
-    loadMe();
+        // capture order
+        const capRes = await fetch(`${BASE_URL}/api?api=paypal_capture`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({orderID}),
+            credentials:'include'
+        });
+        const captured = await capRes.json();
+        alert(`Deposit successful: $${amt}`);
+        await loadMe();
+    } catch(e){ console.error(e); alert("PayPal failed"); }
 }
 </script>
 </body>
